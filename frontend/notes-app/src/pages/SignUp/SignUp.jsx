@@ -85,7 +85,7 @@ const SignUp = () => {
                         <button type='submit' className='btn-primary'> Create Account</button>
                         <p className='text-sm text-center mt-4'>
                             Already have an account {""}
-                            <Link to="/login" className="font-medium text-blue-600 underline">
+                            <Link to="/" className="font-medium text-blue-600 underline">
                                 Login
                             </Link>
                         </p>
