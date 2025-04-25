@@ -2,7 +2,7 @@ require("dotenv").config();
 
 // const config = require("./config.json");
 const mongoose = require("mongoose")
-const bcrypt = require("bcrypt")
+const bcrypt = require("bcryptjs")
 
 mongoose.connect(process.env.MONGODB_URI)
 
