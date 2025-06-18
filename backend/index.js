@@ -30,9 +30,11 @@ app.get("/", (req, res) => {
 
 
 // Create Account
+
 app.post("/create-account", async (req, res) => {
   const { fullName, email, password } = req.body;
 
+  // ✅ Input validations
   if (!fullName) {
     return res.status(400).json({ error: true, message: "Full name is required" });
   }
@@ -43,27 +45,35 @@ app.post("/create-account", async (req, res) => {
     return res.status(400).json({ error: true, message: "Password is required" });
   }
 
-  // ✅ Check if user already exists
-  const existingUser = await User.findOne({ email });
-
-  if (existingUser) {
-    return res.status(400).json({ error: true, message: "User already exists" });
-  }
-
-  // ✅ Hash the password before saving
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const newUser = new User({
-    fullName,
-    email,
-    password: hashedPassword,
-  });
-
   try {
+    // ✅ Check if user already exists
+    const existingUser = await User.findOne({ email });
+
+    if (existingUser) {
+      return res.status(409).json({ error: true, message: "User already exists" }); // Use 409 Conflict
+    }
+
+    // ✅ Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = new User({
+      fullName,
+      email,
+      password: hashedPassword,
+    });
+
     await newUser.save();
-    return res.json({
+
+    // ✅ Optional: Generate JWT here if you want auto-login after signup
+    const accessToken = jwt.sign({ userId: newUser._id }, process.env.ACCESS_TOKEN_SECRET, {
+      expiresIn: "24000m",
+    });
+
+    // ✅ Respond
+    return res.status(201).json({
       error: false,
       message: "Account created successfully",
+      accessToken, // if you want frontend to auto-login
       user: {
         _id: newUser._id,
         fullName: newUser.fullName,
@@ -71,52 +81,64 @@ app.post("/create-account", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Signup Error:", error.message);
     return res.status(500).json({ error: true, message: "Internal server error" });
   }
 });
 
-
-
 // Login Account 
 app.post("/login", async (req, res) => {
-   const { email, password } = req.body;
+  const { email, password } = req.body;
 
-   if (!email) {
-      return res.status(400).json({ error: true, message: "Email is required" });
-   }
-   if (!password) {
-      return res.status(400).json({ error: true, message: "Password is required" });
-   }
+  // ✅ Validate input
+  if (!email) {
+    return res.status(400).json({ error: true, message: "Email is required" });
+  }
+  if (!password) {
+    return res.status(400).json({ error: true, message: "Password is required" });
+  }
 
-   // ✅ Check if user exists
-   const user = await User.findOne({ email });
+  try {
+    // ✅ Check if user exists
+    const user = await User.findOne({ email });
 
-   if (!user) {
-      return res.status(400).json({ error: true, message: "User does not exist" });
-   }
+    if (!user) {
+      return res.status(404).json({ error: true, message: "User does not exist" });
+    }
 
-   // ✅ Verify password
-   const isPasswordValid = await bcrypt.compare(password, user.password);
+    // ✅ Compare password using bcrypt
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
-   if (!isPasswordValid) {
-      return res.status(400).json({ error: true, message: "Invalid password" });
-   }
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: true, message: "Invalid password" });
+    }
 
-   // ✅ Generate JWT token
-   const token = jwt.sign({ user }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    // ✅ Generate JWT with only necessary payload
+    const payload = {
+      userId: user._id,
+      email: user.email
+    };
 
-   return res.json({
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+    // ✅ Send response
+    return res.json({
       error: false,
       message: "Login successful",
       token,
       user: {
-         _id: user._id,
-         fullName: user.fullName,
-         email: user.email,
-         createdOn: user.createdOn
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        createdOn: user.createdOn
       }
-   });
+    });
+  } catch (err) {
+    console.error("Login Error:", err.message);
+    return res.status(500).json({ error: true, message: "Internal server error" });
+  }
 });
+
 
 
 // Get users
