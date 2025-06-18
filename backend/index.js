@@ -30,9 +30,6 @@ app.get("/", (req, res) => {
 
 
 // Create Account
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-
 app.post("/create-account", async (req, res) => {
   const { fullName, email, password } = req.body;
 
@@ -46,15 +43,14 @@ app.post("/create-account", async (req, res) => {
     return res.status(400).json({ error: true, message: "Password is required" });
   }
 
-  const isUser = await User.findOne({ email });
+  // ✅ Check if user already exists
+  const existingUser = await User.findOne({ email });
 
-  if (isUser) {
-    return res.status(400).json({
-      error: true,
-      message: "User already exists",
-    });
+  if (existingUser) {
+    return res.status(400).json({ error: true, message: "User already exists" });
   }
 
+  // ✅ Hash the password before saving
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const newUser = new User({
@@ -63,84 +59,63 @@ app.post("/create-account", async (req, res) => {
     password: hashedPassword,
   });
 
-  await newUser.save();
-
-  // Don't send whole user in token; send minimal info
-  const payload = {
-    _id: newUser._id,
-    email: newUser.email,
-  };
-
-  const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
-    expiresIn: "24000m",
-  });
-
-  // Remove password before sending user in response
-  const userWithoutPassword = {
-    _id: newUser._id,
-    fullName: newUser.fullName,
-    email: newUser.email,
-  };
-
-  return res.json({
-    error: false,
-    user: userWithoutPassword,
-    accessToken,
-    message: "Registration successful",
-  });
+  try {
+    await newUser.save();
+    return res.json({
+      error: false,
+      message: "Account created successfully",
+      user: {
+        _id: newUser._id,
+        fullName: newUser.fullName,
+        email: newUser.email,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: true, message: "Internal server error" });
+  }
 });
+
 
 
 // Login Account 
 app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+   const { email, password } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ error: true, message: "Email is required" });
-  }
-  if (!password) {
-    return res.status(400).json({ error: true, message: "Password is required" });
-  }
+   if (!email) {
+      return res.status(400).json({ error: true, message: "Email is required" });
+   }
+   if (!password) {
+      return res.status(400).json({ error: true, message: "Password is required" });
+   }
 
-  const userInfo = await User.findOne({ email });
+   // ✅ Check if user exists
+   const user = await User.findOne({ email });
 
-  if (!userInfo) {
-    return res.status(400).json({ error: true, message: "User not found" });
-  }
+   if (!user) {
+      return res.status(400).json({ error: true, message: "User does not exist" });
+   }
 
-  // ✅ Compare input password with hashed password
-  const isPasswordMatch = await bcrypt.compare(password, userInfo.password);
+   // ✅ Verify password
+   const isPasswordValid = await bcrypt.compare(password, user.password);
 
-  if (!isPasswordMatch) {
-    return res.status(400).json({
-      error: true,
-      message: "Invalid Credentials",
-    });
-  }
+   if (!isPasswordValid) {
+      return res.status(400).json({ error: true, message: "Invalid password" });
+   }
 
-  // ✅ Prepare JWT payload with minimal safe info
-  const payload = {
-    _id: userInfo._id,
-    email: userInfo.email,
-  };
+   // ✅ Generate JWT token
+   const token = jwt.sign({ user }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-  const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
-    expiresIn: "24000m",
-  });
-
-  // ✅ Don't return hashed password
-  const userWithoutPassword = {
-    _id: userInfo._id,
-    fullName: userInfo.fullName,
-    email: userInfo.email,
-  };
-
-  return res.json({
-    error: false,
-    message: "Login successful",
-    user: userWithoutPassword,
-    accessToken,
-  });
+   return res.json({
+      error: false,
+      message: "Login successful",
+      token,
+      user: {
+         _id: user._id,
+         fullName: user.fullName,
+         email: user.email,
+         createdOn: user.createdOn
+      }
+   });
 });
 
 
