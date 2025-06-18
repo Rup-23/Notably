@@ -30,87 +30,118 @@ app.get("/", (req, res) => {
 
 
 // Create Account
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+
 app.post("/create-account", async (req, res) => {
+  const { fullName, email, password } = req.body;
 
-   const { fullName, email, password } = req.body;
-   if (!fullName) {
-      return res.status(400).json({ error: true, message: "Fullname is required" })
-   }
-   if (!email) {
-      return res.status(400).json({ error: true, message: "Email is required" })
-   }
-   if (!password) {
-      return res.status(400).json({ error: true, message: "password is required" })
-   }
+  if (!fullName) {
+    return res.status(400).json({ error: true, message: "Full name is required" });
+  }
+  if (!email) {
+    return res.status(400).json({ error: true, message: "Email is required" });
+  }
+  if (!password) {
+    return res.status(400).json({ error: true, message: "Password is required" });
+  }
 
+  const isUser = await User.findOne({ email });
 
-   const isUser = await User.findOne({ email: email });
+  if (isUser) {
+    return res.status(400).json({
+      error: true,
+      message: "User already exists",
+    });
+  }
 
-   if (isUser) {
-      return res.json({
-         error: true,
-         message: "user already exist",
-      });
-   }
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-   const hashedPassword = await bcrypt.hash(password, 10);
+  const newUser = new User({
+    fullName,
+    email,
+    password: hashedPassword,
+  });
 
-   const user = new User({
-      fullName,
-      email,
-      password: hashedPassword,
-   });
+  await newUser.save();
 
-   await user.save();
+  // Don't send whole user in token; send minimal info
+  const payload = {
+    _id: newUser._id,
+    email: newUser.email,
+  };
 
-   const accessToken = jwt.sign({ user }, process.env.ACCESS_TOKEN_SECRET, {
-      expiresIn: "24000m"
-   });
-   return res.json({
-      error: false,
-      user,
-      accessToken,
-      message: "Registration Successful"
-   });
+  const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
+    expiresIn: "24000m",
+  });
+
+  // Remove password before sending user in response
+  const userWithoutPassword = {
+    _id: newUser._id,
+    fullName: newUser.fullName,
+    email: newUser.email,
+  };
+
+  return res.json({
+    error: false,
+    user: userWithoutPassword,
+    accessToken,
+    message: "Registration successful",
+  });
 });
+
 
 // Login Account 
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email) {
-    return res.status(400).json({ message: "Email is required" });
+    return res.status(400).json({ error: true, message: "Email is required" });
   }
   if (!password) {
-    return res.status(400).json({ message: "Password is required" });
+    return res.status(400).json({ error: true, message: "Password is required" });
   }
 
-  const userInfo = await User.findOne({ email: email });
+  const userInfo = await User.findOne({ email });
 
   if (!userInfo) {
-    return res.status(400).json({ message: "User not found" });
+    return res.status(400).json({ error: true, message: "User not found" });
   }
 
-  if (userInfo.password === password) {
-    const user = { user: userInfo };
-    const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-      expiresIn: "24000m",
-    });
+  // ✅ Compare input password with hashed password
+  const isPasswordMatch = await bcrypt.compare(password, userInfo.password);
 
-    return res.json({
-      error: false,
-      message: "Login successful",
-      email,
-      accessToken,
-    });
-  } else {
+  if (!isPasswordMatch) {
     return res.status(400).json({
       error: true,
       message: "Invalid Credentials",
     });
   }
-});
 
+  // ✅ Prepare JWT payload with minimal safe info
+  const payload = {
+    _id: userInfo._id,
+    email: userInfo.email,
+  };
+
+  const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
+    expiresIn: "24000m",
+  });
+
+  // ✅ Don't return hashed password
+  const userWithoutPassword = {
+    _id: userInfo._id,
+    fullName: userInfo.fullName,
+    email: userInfo.email,
+  };
+
+  return res.json({
+    error: false,
+    message: "Login successful",
+    user: userWithoutPassword,
+    accessToken,
+  });
+});
 
 
 // Get users
