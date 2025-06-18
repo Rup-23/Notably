@@ -76,40 +76,41 @@ app.post("/create-account", async (req, res) => {
 
 // Login Account 
 app.post("/login", async (req, res) => {
-   const { email, password } = req.body;
-  
-   if (!email) {
-      return res.status(400).json({ message: "Email is required" });
-   }
-   if (!password) {
-      return res.status(400).json({ message: "password is required" });
-   }
+  const { email, password } = req.body;
 
-   const userInfo = await User.findOne({ email: email });
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+  if (!password) {
+    return res.status(400).json({ message: "Password is required" });
+  }
 
-   if (!userInfo) {
-      return res.status(400).json({ message: "user not found" })
-   }
+  const userInfo = await User.findOne({ email: email });
 
+  if (!userInfo) {
+    return res.status(400).json({ message: "User not found" });
+  }
 
-   if (userInfo.email == email && userInfo.password ==  userInfo.password)  {
-      const user = { user: userInfo };
-      const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-         expiresIn: "24000m",
-      });
-      return res.json({
-         error: false,
-         message: "Login successful",
-         email,
-         accessToken,
-      })
-   } else {
-      return res.status(400).json({
-         error: true,
-         message: "Invalid Credentials",
-      })
-   }
-})
+  if (userInfo.password === password) {
+    const user = { user: userInfo };
+    const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+      expiresIn: "24000m",
+    });
+
+    return res.json({
+      error: false,
+      message: "Login successful",
+      email,
+      accessToken,
+    });
+  } else {
+    return res.status(400).json({
+      error: true,
+      message: "Invalid Credentials",
+    });
+  }
+});
+
 
 
 // Get users
